@@ -58,6 +58,10 @@ jobs:
             --query "Reservations[].Instances[].PublicIpAddress" --output text)
           echo "PUBLIC_IP=$PUBLIC_IP" >> $GITHUB_ENV
 
+      - name: Wait for EC2 to become available
+        run: |
+          aws ec2 wait instance-status-ok --instance-ids ${{ env.INSTANCE_ID }}
+          echo "La instancia EC2 está lista."
 
       - name: Deploy HTML to EC2
         run: |
