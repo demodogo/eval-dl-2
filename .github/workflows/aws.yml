@@ -35,7 +35,7 @@ jobs:
         run: |
           aws ec2 import-key-pair \
             --key-name temp-key-${{ github.run_id }} \
-            --public-key-material "$(cat ddg-dl-temp.pub)"
+            --public-key-material "$(base64 -w 0 ddg-dl-temp.pub)"
 
       - name: Launch EC2 Instance
         run: |
