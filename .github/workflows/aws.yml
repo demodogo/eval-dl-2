@@ -17,8 +17,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-
-
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v3
         with:
@@ -65,26 +63,29 @@ jobs:
 
       - name: Deploy HTML to EC2
         run: |
-          scp -o StrictHostKeyChecking=no -i ddg-dl-temp index.html ec2-user@${{ env.PUBLIC_IP }}:/tmp/index.html
+          scp -q -o StrictHostKeyChecking=no -i ddg-dl-temp index.html ec2-user@${{ env.PUBLIC_IP }}:/tmp/index.html
           ssh -o StrictHostKeyChecking=no -i ddg-dl-temp ec2-user@${{ env.PUBLIC_IP }} << 'EOF'
-            sudo yum update -y
-            sudo yum install -y httpd
+            sudo yum update -y -q
+            sudo yum install -y -q httpd
             sudo mv /tmp/index.html /var/www/html/index.html
             sudo systemctl start httpd
             sudo systemctl enable httpd
           EOF
           echo "HTML desplegado: http://${{ env.PUBLIC_IP }}"
 
-
       - name: Create AMI from EC2 Instance
         run: |
-          aws ec2 create-image \
+          IMAGE_ID=$(aws ec2 create-image \
             --instance-id ${{ env.INSTANCE_ID }} \
-            --name "dl-ami-${{ github.run_id }}"
+            --name "dl-ami-${{ github.run_id }}" \
+            --query 'ImageId' --output text)
           echo "IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
           echo "AMI creada desde la instancia ${{ env.INSTANCE_ID }}."
 
-
+      - name: Wait for AMI to be available
+        run: |
+          aws ec2 wait image-available --image-ids ${{ env.IMAGE_ID }}
+          echo "La AMI ${{ env.IMAGE_ID }} está lista."
 
       - name: Launch New Instance from Custom AMI
         run: |
@@ -95,9 +96,9 @@ jobs:
             --key-name temp-key-${{ github.run_id }} \
             --security-group-ids ${{ env.SECURITY_GROUP_ID }} \
             --subnet-id ${{ env.SUBNET_ID }} \
-            --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=InstanciaConAMICuston}]' \
-            --query 'Instances[0].InstanceId' --output text)
-          echo "Instancia creada con AMI custom: $NEW_INSTANCE_ID"
+            --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=dmdg-custom-instance}]' \
+            --query "Instances[].InstanceId" --output text)
+          echo "NEW_INSTANCE_ID=$NEW_INSTANCE_ID" >> $GITHUB_ENV
 
       - name: Clean Up Resources
         if: always()
